@@ -27,10 +27,10 @@ class SEPLQService(Service):
     Extractor for Symantec Central Quarantine files
     """
 
-    name = "SEPLQ"
-    version = '1.0.0'
+    name = "UnQua"
+    version = '1.0.1'
     supported_types = ['Sample']
-    description = "Extractor for Symantec Local Quarantine files"
+    description = "Extractor for some local Quarantine files"
 
     @staticmethod
     def valid_for(obj):
@@ -41,20 +41,29 @@ class SEPLQService(Service):
             raise ServiceConfigError("Need at least 4 bytes.")
         # Reset the read pointer.
         obj.filedata.seek(0)
-        if not data[0:4] == b'\x90\x12\x00\x00':
-            raise ServiceConfigError("Not a SEP Local Quarantine file")
+        if not data[0:4] == b'\x90\x12\x00\x00' or not data[0:8] == b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1':
+            raise ServiceConfigError("Not supported AV Quarantine file format")
         
     def run(self, obj, config):
         self.config = config
         self.obj = obj
         #self._doit(obj.filedata.read()[start_offset:end_offset], filters, analyze )
         #self._add_result('SEPLQ', "" % output, {'Value': output})
-        datacq = bytearray(obj.filedata.read())
-        (metaoutcsv, data) = ExtractPayloads(datacq)
-        h = md5(data).hexdigest()
-        name = h
-	metaout = metaoutcsv.split(",")
-        name = ntpath.basename(str(metaout[0]))
+        if data[0:4] == b'\x90\x12\x00\x00':
+            datacq = bytearray(obj.filedata.read())
+            (metaoutcsv, data) = ExtractPayloads(datacq)
+            h = md5(data).hexdigest()
+            name = h
+	    metaout = metaoutcsv.split(",")
+            name = ntpath.basename(str(metaout[0]))
+        elsif data[0:8] == b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1':
+            datacq = bytearray(obj.filedata.read())
+            (metaout, data) = ExtractBUP(datacq)
+            h = md5(data).hexdigest()
+            name = h
+	    metaout = metaoutcsv.split(",")
+            name = ntpath.basename(str(metaout[0]))
+            
         fields = (
         "Filename",
 	"Num Failed Remediations",
@@ -90,7 +99,7 @@ class SEPLQService(Service):
         for i in metaout:
 	    if i and i != 0 and i != "0" and i != "":
                 self._info("meta: %s" % str(i))
-                self._add_result('SEPLQ', str(i)) 
+                self._add_result('UnQua', str(i)) 
             n+=1
         self._info("New file: %s (%d bytes, %s)" % (name, len(data), h))
         handle_file(name, io.BytesIO(data).read(), self.obj.source,
